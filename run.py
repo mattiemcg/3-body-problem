@@ -1,7 +1,8 @@
 import numpy as np
 import re
 
-from three_body_collision import ThreeHardParticlesRing, animate_three_particles_on_ring
+from three_body_collision import ThreeHardParticlesRing
+from animation import sample_for_animation, animate_three_particles_on_ring
 from position_prob import time_weighted_position_hist_per_particle, plot_position_histograms
 from momentum_state_prob import time_weighted_momentum_hist_per_particle, plot_momentum_histograms
 
@@ -87,7 +88,6 @@ def _prompt_simulation_inputs():
     use_SR = _prompt_yesno("Use special relativity?", default=False)
 
     if use_SR:
-        c = _prompt_float("Speed of light c (use 1 for natural units)", 1.0)
         K_rel = _prompt_float("Relativistic internal kinetic energy K_rel", 1.0)
     else:
         # dummy placeholders (not used when use_SR=False)
@@ -99,7 +99,7 @@ def _prompt_simulation_inputs():
     x1 = _prompt_float("Initial x1 in [0, L)", 0.5)
 
     m = _prompt_vec3("Masses m1,m2,m3", "1.01, 1.0, 0.99")
-    v = _prompt_vec3("Velocities v1,v2,v3", "0.7, -0.2, 0.1")
+    v = _prompt_vec3("Velocities v1,v2,v3", "0.2, -0.4, 0.2")
 
     L_free = L - 3.0 * rod_length
     if L_free < 0:
@@ -125,7 +125,6 @@ def _prompt_simulation_inputs():
         "rod_length": rod_length,
         "x1": x1,
         "use_SR": use_SR,
-        "c": c,
         "K_rel": K_rel,
     }
 
@@ -134,13 +133,13 @@ def _prompt_simulation_inputs():
 def run_animation(sim_kwargs):
     print("\n--- Animation setup ---")
     t_end = _prompt_float("Animation duration t_end", 30.0)
-    dt_sample = _prompt_float("Sampling time step dt_sample", 0.005)
-    interval_ms = _prompt_int("Animation frame interval (ms)", 15)
+    dt_sample = _prompt_float("Sampling time step dt_sample", 0.001)
+    interval_ms = _prompt_int("Animation frame interval (ms)", 1)
 
     sim = ThreeHardParticlesRing(**sim_kwargs)
-    sim.normalise_com_energy()
+    sim.normalise_COM_energy()
 
-    times, xs = sim.sample_for_animation(t_end=t_end, dt_sample=dt_sample)
+    times, xs = sample_for_animation(sim, t_end=t_end, dt_sample=dt_sample)
     animate_three_particles_on_ring(times, xs, L=sim.L, interval_ms=interval_ms)
 
 

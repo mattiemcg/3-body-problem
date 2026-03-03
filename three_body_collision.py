@@ -1,6 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation  
 
 
 
@@ -12,6 +10,7 @@ def calculate_gamma_factor(v, c):
 
     return 1.0 / np.sqrt(1.0 - (v*v)/(c*c))
 
+
 def vel_add(u, V, c):
     '''
     relativistic velocity addition: u' = (u - V)/(1 - uV/c^2)
@@ -20,14 +19,15 @@ def vel_add(u, V, c):
 
     return (u - V) / (1.0 - (u*V)/(c*c))
 
+
 def relativistic_elastic_collision_1d(v_i, v_j, m_i, m_j, c):
     """
     Exact 1D *elastic* collision using 4-momentum conservation.
 
     Method:
-      1) Compute lab-frame total energy E and momentum P.
-      2) Boost to COM frame where total momentum is zero.
-      3) In 1D elastic scattering, velocities reverse in COM: v' -> -v'.
+      1) Compute lab-frame (global centre momentum frame) total energy E and momentum P.
+      2) Boost to COM frame of the two particles where total momentum is zero.
+      3) In 1D elastic scattering, velocities reverse in COM frame: v' -> -v'.
       4) Boost back to lab frame.
     """
 
@@ -47,15 +47,15 @@ def relativistic_elastic_collision_1d(v_i, v_j, m_i, m_j, c):
     #---COM velocity: V = c^2 P / E
     V = (c*c) * P_tot / E_tot
 
-    #---boost to COM frame
-    v_i_com = vel_add(v_i, V, c)
-    v_j_com = vel_add(v_j, V, c)
+    #---boost to COM frame of two particles
+    v_i_com_before = vel_add(v_i, V, c)
+    v_j_com_before = vel_add(v_j, V, c)
 
     #---elastic collision in COM: reverse velocities
-    v_i_com_after = -v_i_com
-    v_j_com_after = -v_j_com
+    v_i_com_after = -v_i_com_before
+    v_j_com_after = -v_j_com_before
 
-    #---boost back to lab frame (inverse boost uses -V)
+    #---boost back to global COM frame (inverse boost uses -V)
     v_i_after = vel_add(v_i_com_after, -V, c)
     v_j_after = vel_add(v_j_com_after, -V, c)
 
@@ -105,7 +105,7 @@ class ThreeHardParticlesRing:
     """
 
 
-    def __init__(self, L, m, v, h, rod_length, x1, c, use_SR, K_rel):
+    def __init__(self, L, m, v, h, rod_length, x1, use_SR, K_rel):
         self.L = float(L)
         self.rod_length = float(rod_length)   #for point particles this is zero
         self.t = 0.0    #start time
@@ -113,7 +113,7 @@ class ThreeHardParticlesRing:
 
         #---relativistic dynamics variables
         self.use_SR = bool(use_SR)
-        self.c = float(c)
+        self.c = 1.0
         self.K_rel = float(K_rel)   #this determines how relativistic the system is
 
         self.m = np.asarray(m, dtype=float).reshape(3,)   #creates 1D 3 entry array of floats for masses
@@ -125,7 +125,10 @@ class ThreeHardParticlesRing:
 
 
     def COM_frame_non_relativistic(self):
-        '''velocities relative to the COM frame'''
+        '''
+        velocities relative to the COM frame
+        in Newtonian COM frame is where the total momentum is zero
+        '''
         
         M = self.m.sum()   #total mass
         V_cm = float((self.m * self.v).sum() / M)   #velocity of COM frame
@@ -133,8 +136,11 @@ class ThreeHardParticlesRing:
 
 
 
-    def COM_frame_relativistic(self):
-        '''velocities relative to the COM frame for relativistic'''
+    def centre_momentum_frame_relativistic(self):
+        '''
+        velocities relative to the COM frame for relativistic
+        where sum of relativistic momentum = 0
+        '''
 
         g = calculate_gamma_factor(self.v, self.c)   #find gamma value for each particle
         P = float(np.sum(g * self.m * self.v))   #calculate momentum for each particle
@@ -175,9 +181,9 @@ class ThreeHardParticlesRing:
         #---if gap is not closing the element of the array is left unchanged as infinity---
 
         k_star = int(np.argmin(times))   #identifies the index of the smallest entry in the times array
-        dt_star = float(times[k_star])   #the time left for the next collision
+        dt_col = float(times[k_star])   #the time left for the next collision
 
-        return dt_star, k_star
+        return dt_col, k_star
 
 
 
@@ -197,6 +203,9 @@ class ThreeHardParticlesRing:
 
     def collide(self, k):
         """
+        gets called at the end of sample_for_animation when the gap is zero
+        it then calls one of the post collision velocity calc
+
         resolve the collision corresponding to gap k becoming 0
         k is the index of the gap array
           k=0: particles (1,2)
@@ -220,79 +229,12 @@ class ThreeHardParticlesRing:
 
 
 
-    def sample_for_animation(self, t_end, dt_sample):
-        """
-        uniform-in-time sampling of n positions for animation
-        this outputs all the n times of each sample and all 3 particles positions at each time
-
-        Returns:
-        times: (n, 1)
-        xs   : (n, 3) positions in [0, L)
-        """
-
-        t_end = float(t_end)   #converts input into float, length of animation
-        dt_sample = float(dt_sample)   #frame size of animation
-
-        times = []   #creates a list of times
-        xs = []   #creates a list
-
-        t_next = self.t   #next time you record the frame
-
-
-        while t_next < t_end: 
-            dt_col, k_star = self.next_event()   #dt_col is the time until the next collision, and not going to use k_star
-            t_col = self.t + dt_col if np.isfinite(dt_col) else np.inf   #calculates absolute time of collision
-
-
-            while t_next < min(t_col, t_end):   #sample frames at each time until you either reach the collision time or reach the end
-            #---at the end, the end time will be less than the next collision time
-
-                '''
-                for each run on the loop, t_next updates by dt_sample, whilst self.t only updates in blocks of dt_col
-                dt is the offset of next sample time from the current sim time
-                '''
-
-                dt = t_next - self.t   #first run, dt=0, then dt=dt_sample, then dt=2dt_sample
-                t_next += dt_sample
-                times.append(t_next)   #add new times to the list
-
-                dh = self.gap_rates()    #array of gap rates
-                h_tmp = self.h + dh * dt   #temporary gap sizes array from time difference
-                h_tmp[2] = self.L_free - h_tmp[0] - h_tmp[1]   #enforces constraint of gaps
-
-                x1_tmp = (self.x1 + self.v[0] * dt) % self.L   #updates new mass 1 position
-
-                a = self.rod_length   #diameter of particle
-
-                '''
-                2 degrees of freedom for centre to centre displacement between particles
-                this is required to calculate positions
-                '''
-                d12 = a + float(h_tmp[0]) 
-                d23 = a + float(h_tmp[1])
-
-                '''
-                updates positions of particles 2 and 3
-                '''
-                x2_tmp = (x1_tmp + d12) % self.L 
-                x3_tmp = (x2_tmp + d23) % self.L
-                
-                xs.append((x1_tmp, x2_tmp, x3_tmp))   #adds tuple of new positions to list of tuples
-
-                
-            if t_col >= t_end or not np.isfinite(t_col):
-                break
-
-            self.advance(dt_col)   #updates the instance of the objects attributes
-            k_close = int(np.argmin(self.h))   #identify index of the smallest gap, this is always the closing gap since we have advanced by dt_col
-            self.collide(k_close) 
-
-        return np.asarray(times, dtype=float), np.asarray(xs, dtype=float)   #converts list of times into a 1D array of floats and list of tuples (x1,x2,x3) into an nx3 array
-
-
-
     def normalise_COM_energy(self):
-        """shift to COM frame (P = 0) and rescale velocities so total kinetic energy = E_target"""
+        """
+        shift to frame where (P = 0)
+        then rescale velocities so total kinetic energy = E_target
+        E_target is always 1 for Newtonian since different energies don't change the dynamics
+        """
 
         if not self.use_SR:
             #---Newtonian COM
@@ -300,101 +242,69 @@ class ThreeHardParticlesRing:
             E_COM = 0.5 * float(np.sum(self.m * self.v**2))
             alpha = np.sqrt(1 / E_COM)
             self.v = self.v * alpha   #now the COM energy is normalised to 1
+            print(0.5 * float(np.sum(self.m * self.v**2)))
             return
 
         
         #---for relativistic energy
-        self.COM_frame_relativistic()   #velocities are in relativistic COM frame      
-        E_rest = np.sum(self.m) * self.c**2
-        self.E_target = np.sum(self.m * self.c**2) + self.K_rel
+        self.centre_momentum_frame_relativistic()   #velocities are in frame where the total momentum is zero      
 
+        E_rest = float(np.sum(self.m) * self.c**2)   #1D array of the energies of each particle in its own rest frame
+        self.E_target = E_rest + float(self.K_rel)   #what value of energy we are normalising to
 
-        def E_com_of(alpha):
-            v_scaled = alpha * self.v
-            if np.any(np.abs(v_scaled) >= self.c):
-                return np.inf
-            g = calculate_gamma_factor(v_scaled, self.c)
-            return float(np.sum(g * self.m * self.c**2))
+        g_before = calculate_gamma_factor(self.v, self.c)   #1D array of gamma factors for each particle in the centre of momentum frame
+        p_before = g_before * self.m * self.v   #1D array of momentums of each particle in the centre of momentum frame
+        total_momentum_before = np.sum((p_before))
+        print("Total relativistic momentum before rescaling for energy =", total_momentum_before)
 
-        # Bracket alpha in [0, alpha_max)
-        alpha_lo = 0.0
-        alpha_hi = 0.999999 * float(np.min(self.c / np.maximum(np.abs(self.v), 1e-300)))
-
-        # If all v ~ 0
-        if not np.isfinite(alpha_hi) or alpha_hi <= 0:
-            if self.E_target > E_rest:
-                raise ValueError("All v=0 in COM; cannot reach higher SR energy by scaling.")
+        #---if there is no relative motion between the particles
+        if np.all(np.abs(p_before) < 1e-14):
+            if self.E_target > E_rest + 1e-14:
+                raise ValueError("All internal momenta are zero in COM; cannot reach higher SR energy.")
             return
 
-        # Bisection solve E_com_of(alpha) = E_target
-        lo, hi = alpha_lo, alpha_hi
-        for _ in range(200):
-            mid = 0.5 * (lo + hi)
-            Emid = E_com_of(mid)
-            if abs(Emid - self.E_target) < 1e-12 * max(1.0, self.E_target):
-                self.v = mid * self.v
-                return
-            if Emid < self.E_target:
-                lo = mid
+
+        def total_energy_of(lam):
+            '''E_i = sqrt(m_i^2 c^4 + p_i^2 c^2)'''
+
+            p_after = lam * p_before
+            return float(np.sum(np.sqrt((self.m**2) * self.c**4 + (p_after**2) * self.c**2)))
+
+
+        #E_target must be greater than rest energy
+        if self.E_target < E_rest:
+            raise ValueError("Target energy is below total rest energy.")
+
+        # Bracket lambda
+        lam_lo = 0.0
+        lam_hi = 1.0
+
+        while total_energy_of(lam_hi) < self.E_target:
+            lam_hi *= 2.0   #find the upper boundary for the scaling factor
+            if lam_hi > 1e12:   #if lambda is getting too high
+                raise RuntimeError("Failed to bracket relativistic momentum scale.")
+
+        # Bisection: energy only approximate is fine
+        for _ in range(100):
+            lam_mid = 0.5 * (lam_lo + lam_hi)
+            E_mid = total_energy_of(lam_mid)
+            if E_mid < self.E_target:
+                lam_lo = lam_mid
             else:
-                hi = mid
+                lam_hi = lam_mid
 
-        self.v =  (0.5 * (lo + hi)) * self.v
+        lamda = 0.5 * (lam_lo + lam_hi)
 
+        p_after = lamda * p_before   #scale momenta exactly
 
-def animate_three_particles_on_ring(times, xs, L, interval_ms=20):
-    
-    L = float(L)
+        E_i = np.sqrt((self.m**2) * self.c**4 + (p_after**2) * self.c**2)
+        self.v = p_after * self.c**2 / E_i
 
-    theta = 2.0 * np.pi * (xs / L)   #maps each position into an angle
-    
-    
-    #---converts angles into cartesian coordinates
-    X = np.cos(theta)   #outputs array nx3
-    Y = np.sin(theta)   #outputs array nx3
-    
-    '''
-    the frame is the row and the column indicates which particle
-    X[i, j], Y[i, j] give the x,y position of particle j at frame i.
-    '''
+        # Diagnostics
+        g_after = calculate_gamma_factor(self.v, self.c)
+        total_momentum_after = float(np.sum(g_after * self.m * self.v))
+        total_energy = float(np.sum(g_after * self.m * self.c**2))
 
-    fig, ax = plt.subplots()
-    ax.set_aspect("equal", adjustable="box")
-
-    
-    #---need to change this to work for any size of circle
-    ax.set_xlim(-1.2, 1.2) 
-    ax.set_ylim(-1.2, 1.2)
-    ax.axis("off")
-
-    
-    #---size of circle needs to have input
-    ring = plt.Circle((0, 0), 1.0, fill=False)
-    ax.add_patch(ring)
-
-    p1, = ax.plot([], [], marker="o", linestyle="None")
-    p2, = ax.plot([], [], marker="o", linestyle="None")
-    p3, = ax.plot([], [], marker="o", linestyle="None")
-    time_text = ax.text(0.02, 0.95, "", transform=ax.transAxes)
-
-
-    def initialise():
-        p1.set_data([], [])
-        p2.set_data([], [])
-        p3.set_data([], [])
-        time_text.set_text("")
-        return p1, p2, p3, time_text
-
-
-    def update(i):
-        p1.set_data([X[i, 0]], [Y[i, 0]])
-        p2.set_data([X[i, 1]], [Y[i, 1]])
-        p3.set_data([X[i, 2]], [Y[i, 2]])
-        time_text.set_text(f"t = {times[i]:.3f}")
-        return p1, p2, p3, time_text
-
-
-    anim = FuncAnimation(fig, update, frames=len(times), init_func=initialise, interval=interval_ms, blit=True)
-    plt.show()
-    return anim
-
+        print("Total relativistic momentum after rescaling =", total_momentum_after)
+        print("Total relativistic energy after rescaling   =", total_energy)
+        print("Energy error =", total_energy - self.E_target)

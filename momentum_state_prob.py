@@ -28,7 +28,7 @@ def time_weighted_momentum_hist_per_particle(sim, n_collisions, n_bins, burn_in)
     time_after_burn_in = 0.0
 
     for n in range(n_collisions):
-        dt_star, k_star = sim.next_event()   #time left before next collision and index of the smallest entry in the times array
+        dt_col, k_star = sim.next_event()   #time left before next collision and index of the smallest entry in the times array
 
         if n >= burn_in:   #only start adding weighting after the burn in period
             
@@ -45,11 +45,11 @@ def time_weighted_momentum_hist_per_particle(sim, n_collisions, n_bins, burn_in)
                 minus 1 to get the index of the correct interval
                 """
                 index_of_interval = int(np.clip(index_of_interval, 0, n_bins - 1))   #if due to rounding it was outwith the range it is clipped back into
-                time_in_each_bin[i, index_of_interval] += dt_star
+                time_in_each_bin[i, index_of_interval] += dt_col
 
-            time_after_burn_in += dt_star   #add time passed to total time
+            time_after_burn_in += dt_col   #add time passed to total time
 
-        sim.advance(dt_star)   #this updates all gaps, absolute position of mass 1 and total sim time
+        sim.advance(dt_col)   #this updates all gaps, absolute position of mass 1 and total sim time
         sim.collide(k_star)   #this updates velocities post collision
 
     probability = time_in_each_bin / time_after_burn_in   #this normalises the time spent in each bin

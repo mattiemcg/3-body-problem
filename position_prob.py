@@ -5,7 +5,7 @@ from three_body_collision import ThreeHardParticlesRing
 
 
 
-def accumulate_time_for_particle(bin_time_weights, x, v, dt_star, L, edges, n_bins):
+def accumulate_time_for_particle(bin_time_weights, x, v, dt_col, L, edges, n_bins):
     """
     accumulates how much time is spent by one particle in each position bin in the time until any two particles collide
     this function updates one row at a time of the array time_in_each_bin
@@ -53,11 +53,11 @@ def accumulate_time_for_particle(bin_time_weights, x, v, dt_star, L, edges, n_bi
     initial_bin = what_bin_your_in(x)   #bin index for bin your in at position x
     bin_width = L / n_bins
 
-    final_position = (x + dt_star * v) % L
+    final_position = (x + dt_col * v) % L
     final_bin = what_bin_your_in(final_position)
 
     if initial_bin == final_bin:
-        bin_time_weights[initial_bin] += dt_star
+        bin_time_weights[initial_bin] += dt_col
         return
 
     else:
@@ -94,7 +94,7 @@ def time_weighted_position_hist_per_particle(sim, n_collisions, n_bins, burn_in)
     """
     calculates the probability for each particle to be within a certain bin
 
-    dt_star is the time between the last collision to the next collision
+    dt_col is the time between the last collision to the next collision
     k_star is the index of the shortest time until collision 
     """
 
@@ -108,7 +108,7 @@ def time_weighted_position_hist_per_particle(sim, n_collisions, n_bins, burn_in)
 
 
     for n in range(n_collisions):
-        dt_star, k_star = sim.next_event()   #returns time for the next collision and index for that time in the times array
+        dt_col, k_star = sim.next_event()   #returns time for the next collision and index for that time in the times array
 
         if n >= burn_in:
             '''
@@ -128,11 +128,11 @@ def time_weighted_position_hist_per_particle(sim, n_collisions, n_bins, burn_in)
 
             #---accumulate exact time in bins for each particle over this segment
             for i in range(3):
-                accumulate_time_for_particle(bin_time_weights[i], xs[i], sim.v[i], dt_star, L, edges, n_bins)
+                accumulate_time_for_particle(bin_time_weights[i], xs[i], sim.v[i], dt_col, L, edges, n_bins)
 
-            time_after_burn_in += dt_star   #adds the time it took for the next collision to the total time excluding burn in
+            time_after_burn_in += dt_col   #adds the time it took for the next collision to the total time excluding burn in
 
-        sim.advance(dt_star)   #updates all gaps, absolute position of particle 1 and total sim time
+        sim.advance(dt_col)   #updates all gaps, absolute position of particle 1 and total sim time
         sim.collide(k_star)   #this updates velocities post collision
 
     prob = bin_time_weights / time_after_burn_in   #gives probability each particle is in each position bin
