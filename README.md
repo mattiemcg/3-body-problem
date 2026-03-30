@@ -1,315 +1,167 @@
-# Three Hard Particles on a Ring  
-## Event-Driven Simulation with Optional Special Relativity + Ergodicity Diagnostics
+# 3-body-problem
 
-This project implements an **event-driven (collision-to-collision)** simulator for **three 1D hard particles (rods)** moving on a **periodic ring** of length `L`.
+Event-driven simulation of hard particles on a 1D ring, with support for both non-relativistic and special-relativistic elastic collisions.
 
+The code can:
+- simulate hard-particle dynamics on a periodic ring,
+- animate particle motion,
+- compute exact time-weighted position histograms,
+- compute time-weighted momentum histograms,
+- compare behaviour across different system sizes and relativistic energy scales.
+
+Although the repository name refers to the 3-body problem, the code is written more generally for N hard particles on a ring.
+
+Project structure
+
+- three_body_collision.py
+  Core simulation code. Defines the HardParticlesRing class, collision rules, centre-of-momentum normalisation, and both Newtonian and relativistic collision updates.
+
+- animation.py
+  Samples trajectories uniformly in time and animates particles moving on the ring.
+
+- position_prob.py
+  Computes exact time-weighted position histograms for each particle.
+
+- momentum_state_prob.py
+  Computes time-weighted momentum histograms for each particle.
+
+- run.py
+  Interactive entry point for running animations, histograms, and comparison/overlay studies.
+
+Features
+
+1. Event-driven hard-particle dynamics
+The simulation evolves the system collision-to-collision rather than using a fixed timestep for dynamics.
+Between collisions, particles move at constant velocity and gaps evolve linearly.
+
+2. Periodic ring geometry
+Particles move on a ring of length L, so positions are wrapped into the interval [0, L).
+
+3. Hard rods or point particles
+You can choose:
+- rod_length = 0 for point particles,
+- rod_length > 0 for finite-size hard rods.
+
+4. Newtonian or special-relativistic collisions
 The code supports:
+- exact 1D elastic collisions in the Newtonian case,
+- exact 1D elastic collisions using relativistic 4-momentum conservation in the SR case.
 
-- Newtonian dynamics  
-- Special relativistic dynamics (exact 1D elastic collisions via 4-momentum conservation)
+5. Histogram analysis
+The project includes tools to measure long-time statistical behaviour:
+- position probability distributions,
+- momentum probability distributions,
+- overlay plots for comparing particles, system sizes, or relativistic energies.
 
-It also provides tools to compute **time-weighted (residence-time) histograms** for:
+Requirements
 
-- Positions (centre coordinates on `[0, L)`)  
-- Momenta (per-particle momentum distributions in the COM frame)
+This project uses:
+- Python 3
+- NumPy
+- Matplotlib
 
-The simulation is fully event-driven: collisions are computed exactly (no time discretisation).
+Install dependencies with:
 
----
+pip install numpy matplotlib
 
-# Repository Contents
+How to run
 
-## `three_body_collision.py`
+The main entry point is:
 
-Core physics engine and animation utilities.
-
-### Special Relativity Support
-
-When `use_SR=True`, the simulator uses:
-
-- Lorentz factor  
-
-\[
-\gamma = \frac{1}{\sqrt{1 - v^2/c^2}}
-\]
-
-- Exact 1D elastic collision via:
-  1. Compute total lab-frame energy \(E\) and momentum \(P\)
-  2. Boost to COM frame \(V = c^2 P / E\)
-  3. Reverse velocities in COM frame
-  4. Boost back to lab frame
-
-This guarantees exact conservation of:
-
-- Total energy  
-- Total momentum  
-- On-shell mass condition  
-
-No approximations are used.
-
----
-
-## Simulator Class
-
-### `ThreeHardParticlesRing`
-
-State is stored in reduced form:
-
-- `x1` — absolute position of particle 1 (wrapped mod `L`)
-- `h[0], h[1], h[2]` — neighbour gaps
-- `v[0], v[1], v[2]` — velocities
-- `m[0], m[1], m[2]` — masses
-- `rod_length = a`
-- `use_SR` — toggle relativistic dynamics
-- `c` — speed of light
-- `K_rel` — relativistic internal kinetic energy (used only when `use_SR=True`)
-
----
-
-## Gap Convention
-
-\[
-h_0 + h_1 + h_2 = L - 3a
-\]
-
-where:
-
-- `h[0]` = gap from particle 1 → 2  
-- `h[1]` = gap from particle 2 → 3  
-- `h[2]` = gap from particle 3 → 1  
-
-Constraint:
-
-\[
-L - 3a \ge 0
-\]
-
----
-
-## Event-Driven Stepping
-
-- `dt, k = sim.next_event()`  
-  Time to next collision and which gap closes.
-
-- `sim.advance(dt)`  
-  Advance positions and gaps exactly.
-
-- `sim.collide(k)`  
-  Perform elastic collision:
-  - Newtonian formula (if `use_SR=False`)
-  - Exact relativistic 4-momentum solution (if `use_SR=True`)
-
----
-
-## COM + Energy Normalisation
-
-### Newtonian Case
-
-1. Shift to COM frame  
-2. Rescale velocities so total kinetic energy:
-
-\[
-E = 1
-\]
-
----
-
-### Relativistic Case
-
-1. Boost to relativistic COM frame  
-2. Target total COM energy:
-
-\[
-E_{\text{target}} = \sum_i m_i c^2 + K_{\text{rel}}
-\]
-
-3. Solve for scaling factor \( \alpha \) via bisection such that:
-
-\[
-\sum_i \gamma(\alpha v_i) m_i c^2 = E_{\text{target}}
-\]
-
-This guarantees:
-
-- \( P_{\text{COM}} = 0 \)
-- Total relativistic energy equals target
-
----
-
-## Animation
-
-```python
-times, xs = sim.sample_for_animation(t_end, dt_sample)
-animate_three_particles_on_ring(times, xs, L, interval_ms)
-```
-
-Note: `FuncAnimation(...)` must use the keyword `init_func=...`.
-
----
-
-# `position_prob.py`
-
-Computes **exact time-weighted position histograms**.
-
-## Main Function
-
-```python
-time_weighted_position_hist_per_particle(
-    sim,
-    n_collisions,
-    n_bins,
-    burn_in
-)
-```
-
-Features:
-
-- Exact segment-by-segment time accumulation  
-- No time discretisation  
-- Burn-in period support  
-- Uniform bins on `[0, L]`
-
----
-
-## Important Assumption
-
-The accumulator assumes:
-
-\[
-|v| \cdot dt < L
-\]
-
-i.e. a particle does **not complete multiple full laps** in one collision-to-collision segment.
-
-If ultra-relativistic speeds make multi-wrap segments possible, the accumulator must be extended.
-
----
-
-# `momentum_state_prob.py`
-
-Computes **time-weighted momentum histograms**.
-
-Momentum is constant between collisions.
-
----
-
-## Momentum Bounds
-
-### Newtonian (after normalisation to \(E=1\))
-
-\[
-|p_i| \le \sqrt{2 m_i}
-\]
-
----
-
-### Relativistic
-
-Given target COM energy:
-
-\[
-E_{\text{target}}
-\]
-
-Maximum allowed momentum per particle:
-
-\[
-p_{\max,i} =
-\frac{1}{c}
-\sqrt{E_{\text{target}}^2 - (m_i c^2)^2}
-\]
-
-Momentum is computed as:
-
-\[
-p_i = \gamma_i m_i v_i
-\]
-
----
-
-## Main Function
-
-```python
-time_weighted_momentum_hist_per_particle(
-    sim,
-    n_collisions,
-    n_bins,
-    burn_in
-)
-```
-
-Returns:
-
-- `edges`
-- `probability`
-- `total_time`
-- `p_max`
-
----
-
-# `run.py`
-
-Interactive CLI runner.
-
-You can run exactly one task at a time:
-
-1. Animation  
-2. Position histogram  
-3. Momentum histogram  
-
----
-
-## Simulation Inputs
-
-The CLI prompts for:
-
-- Use special relativity? (y/n)
-- If yes:
-  - Speed of light `c`
-  - Relativistic internal kinetic energy `K_rel`
-- Ring length `L`
-- Rod length `a`
-- Initial `x1`
-- Masses `m1,m2,m3`
-- Velocities `v1,v2,v3`
-- Gaps `h0,h1,h2`
-
-Gaps must satisfy:
-
-\[
-h_0 + h_1 + h_2 = L - 3a
-\]
-
-Auto-generated gaps are provided by default and can be overridden.
-
----
-
-# Installation
-
-```bash
-conda create -n three-ring python=3.11 numpy matplotlib
-conda activate three-ring
-```
-
-Run:
-
-```bash
 python run.py
-```
 
----
+This opens an interactive menu with the following options:
 
-# Physics Summary
+1. Animation
+2. Position histogram
+3. Momentum histogram
+4. Both position and momentum histograms
+5. Overlay particle 1 momentum histograms for fixed system sizes
+6. Special-relativistic position overlays for fixed N=3 and multiple K values
 
-This system is a minimal nontrivial model of:
+You will then be prompted to enter simulation parameters such as:
+- number of particles,
+- ring length,
+- rod length,
+- initial position,
+- masses,
+- velocities,
+- gap sizes,
+- whether to use special relativity.
 
-- Hard-core many-body dynamics  
-- Deterministic chaos  
-- Microcanonical ergodicity  
-- Relativistic few-body scattering (when enabled)
+Simulation parameters
 
-It preserves:
+Important inputs include:
+- N — number of particles
+- L — ring length
+- m — particle masses
+- v — initial velocities
+- h — free gaps between neighbouring particles
+- rod_length — particle diameter / rod length
+- x1 — initial position of particle 1
+- use_SR — whether to use special relativity
+- K_rel — relativistic internal kinetic energy target
 
-- Exact collision times  
-- Exact conservation laws  
-- Exact time-weighted observables  
+Geometric constraint
+
+The gaps must satisfy:
+
+sum(h) = L - N * rod_length
+
+This ensures the particles fit consistently on the ring.
+
+Physics implemented
+
+Non-relativistic case
+For Newtonian dynamics, collisions are updated using the exact 1D elastic collision formulas, and the total centre-of-mass kinetic energy is normalised to 1.
+
+Relativistic case
+For special relativity, the code:
+- boosts into the centre-of-momentum frame,
+- rescales internal momenta to match a chosen target energy,
+- performs exact two-body elastic collisions using relativistic velocity transformations.
+
+Outputs
+
+Depending on the selected mode, the code can produce:
+- an animation of particles moving around the ring,
+- per-particle position histograms,
+- per-particle momentum histograms,
+- overlay plots comparing:
+  - all particles in a single run,
+  - particle 1 across multiple system sizes,
+  - N=3 systems at different relativistic energy scales.
+
+Example workflow
+
+To generate a momentum histogram:
+
+python run.py
+
+Then choose:
+
+3
+
+and enter the requested parameters.
+
+To generate an animation, run the same script and choose:
+
+1
+
+Notes
+
+- The code is general in particle number N, despite the repository name.
+- The simulation is event-driven, so collision times are computed exactly from gap-closing times.
+- Histogram probabilities are time-weighted rather than simple counts, so they reflect the fraction of time spent in each bin.
+
+Possible future improvements
+
+- Save plots automatically to files
+- Add command-line arguments instead of interactive prompts
+- Add unit tests for collision and normalisation routines
+- Add support for exporting animation files
+- Add documentation for the statistical and physical interpretation of the histograms
+
+Author
+
+Mattie McG
